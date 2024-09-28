@@ -8,7 +8,7 @@
 
 ### 首先保证可以正确运行Lab0.5，测试结果如下
 
-![alt text](d2032edac40f98f6ca05a009468b784.png)
+![d2032edac40f98f6ca05a009468b784.png]（https://github.com/zoygk/myimage/blob/main/NKUOS/oslab/f55b101701e727d51372f24dcf4fb6d.png）
 
 ### 使用GDB进行调试，首先在终端中使用命令make debug，然后再make gdb运行结果如下
 
