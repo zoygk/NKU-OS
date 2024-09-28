@@ -18,13 +18,13 @@
 
 ![[alt text](ca9fdbc1f090b4bb4adf8a4a11e034d.png)](https://github.com/zoygk/myimage/blob/main/NKUOS/oslab/ca9fdbc1f090b4bb4adf8a4a11e034d.png)
 
-### 其中指令0x1000:auipc t0 , 0x0将当前程序计数器PC中保存的值与0x0相加，并将结果保存在寄存器t0中，这里t0将获得当前PC值的高20位，单步调试，并查看t0寄存器的值，验证结果
+### 其中指令auipc t0 , 0x0将当前程序计数器PC中保存的值与0x0相加，并将结果保存在寄存器t0中，这里t0将获得当前PC值的高20位，单步调试，并查看t0寄存器的值，验证结果
 
 ![[alt text](20be9b113cae9e02b37580d5e507da6.png)](https://github.com/zoygk/myimage/blob/main/NKUOS/oslab/20be9b113cae9e02b37580d5e507da6.png)
 
 ### 可以看到r0寄存器的值为0x1000
 
-### 第二条指令0x1004: addi a1, t0, 32将寄存器t0中的值与立即数32相加，并将结果存储在寄存器a1中，单步调试，验证结果
+### 第二条指令addi a1, t0, 32将寄存器t0中的值与立即数32相加，并将结果存储在寄存器a1中，单步调试，验证结果
 
 ![[alt text](628d7ad32f68deb74bc28a65dae005e.png)](https://github.com/zoygk/myimage/blob/main/NKUOS/oslab/628d7ad32f68deb74bc28a65dae005e.png)
 
