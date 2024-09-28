@@ -29,7 +29,7 @@ case IRQ_S_TIMER:
     break;
 ```
 运行结果如下图所示：  
-![](clock.png)  
+![](https://github.com/zoygk/myimage/blob/main/NKUOS/Lab0%26Lab1/clock.png)  
 
 #### 扩展练习 Challenge1：描述与理解中断流程
 **描述ucore中处理中断异常的流程（从异常的产生开始），其中mov a0，sp的目的是什么？SAVE_ALL中寄存器保存在栈中的位置是什么确定的？对于任何中断，__alltraps 中都需要保存所有寄存器吗？请说明理由。**
@@ -106,4 +106,4 @@ int kern_init(void) {
 }
 ```  
 运行结果如下图所示：  
-![](mret.png)
+![mret.png](https://github.com/zoygk/myimage/blob/main/NKUOS/Lab0%26Lab1/mret.png)
