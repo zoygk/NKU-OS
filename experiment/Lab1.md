@@ -45,7 +45,7 @@ case IRQ_S_TIMER:
   
 SAVE_ALL中寄存器保存在栈中的位置通过 sp 寄存器确定， sp 寄存器中保存的地址为寄存器结构体的基地址，结构体中依次排列通用寄存器 x0 到 x31 ，然后依次排列 sstatus ， sepc ， sbadvaddr ， scause 这4个和中断相关的 CSR ，通过 sp 寄存器及偏移量即可访问保存的寄存器。  
   
-__alltraps 中不一定需要保存所有寄存器。如果中断处理程序不会改变太多的上下文信息，比如时钟中断，就可以只保存少量寄存器。
+对于任何中断，__alltraps 中都需要保存所有寄存器。如果异常处理程序执行过程中出现了某些问题，还需要通过 __alltraps 恢复到之前的状态。
 
 #### 扩增练习 Challenge2：理解上下文切换机制
 **在trapentry.S中汇编代码 csrw sscratch, sp；csrrw s0, sscratch, x0实现了什么操作，目的是什么？SAVE_ALL里面保存了stval、scause这些csr，而在RESTORE_ALL里面却不还原它们，那这样restore的意义何在呢？**
