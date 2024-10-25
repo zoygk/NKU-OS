@@ -360,8 +360,8 @@ Best-Fit算法的核心思想是找到最佳匹配的空闲内存块，以最大
 #### 实验结果
 
 实验结果如下：
-![alt text](1.png)
-![alt text](2.png)
+![alt text](https://github.com/zoygk/myimage/blob/main/NKUOS/Lab2/1.png)
+![alt text](https://github.com/zoygk/myimage/blob/main/NKUOS/Lab2/2.png)
 
 #### 进一步的改进空间
 
