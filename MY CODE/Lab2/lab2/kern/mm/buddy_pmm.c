@@ -4,7 +4,7 @@
 #include <buddy_pmm.h>
 #include <stdio.h>
 
-#define MAX_ORDER 15 // 最大阶次 2^10 = 1024 pages
+#define MAX_ORDER 15 // 最大阶次 2^15 = 32768 pages
 
 typedef struct {
     list_entry_t free_list[MAX_ORDER + 1];  // 每个阶次的空闲链表
