@@ -21,7 +21,7 @@ First-fit 算法的核心思想是：在分配物理内存时，总是选择第�
 
 函数default_init_memmap初始化一段连续的物理页面，并将其添加到空闲页面列表中，从而确保这些页面在内存管理系统中被正确标识和管理。。详细注释如下：
 
-```
+```c
 static void
      default_init_memmap(struct Page *base, size_t n) {
     // 确保请求的页面数量大于0
@@ -29,7 +29,7 @@ static void
     // 从base开始的指针p，用于遍历将要初始化的页面
     struct Page *p = base;
 
-    /* 遍历从base开始的n个页面，每次遍历确保页面被标记为已保留（未使用），并将页面的标志和属性设置为0，同时给hi设置页面的引用计数为0 */
+    /* 遍历从base开始的n个页面，每次遍历确保页面被标记为已保留（未使用），并将页面的标志和属性设置为0，同时设置页面的引用计数为0 */
     for (; p != base + n; p ++) {
         assert(PageReserved(p));
         p->flags = p->property = 0;
@@ -70,7 +70,7 @@ static void
 
 default_alloc_pages函数从空闲页面列表中分配连续的n个空闲页。如果找到足够的连续空闲页面，则更新空闲列表和页面属性，并返回分配的页面。如果未找到足够的页面，则返回 NULL。
 
-```
+```c
 static struct Page *
 default_alloc_pages(size_t n) {
     assert(n > 0);
@@ -122,7 +122,7 @@ default_alloc_pages(size_t n) {
 
 函数default_free_pages释放内存空间,即将指定数量的页面释放并返回到空闲列表中。同时可以的话合并相邻的空闲页面，以减少空闲列表中小块的数量。
 
-```
+```c
 static void
 default_free_pages(struct Page *base, size_t n) {
     assert(n > 0);
@@ -260,7 +260,7 @@ default_free_pages:
 
 在best_fit_init_memmap，参照default_pmm.c中的First Fit中的efault_init_memmap进行初始化。
 
-```
+```c
     for (; p != base + n; p ++) {
         assert(PageReserved(p));
 
@@ -272,7 +272,7 @@ default_free_pages:
     }
 ```
 
-```
+```c
 while ((le = list_next(le)) != &free_list) {
             struct Page* page = le2page(le, page_link);
              /*LAB2 EXERCISE 2: YOUR CODE*/ 
@@ -293,7 +293,7 @@ while ((le = list_next(le)) != &free_list) {
 
 Best-Fit算法的核心思想是找到最佳匹配的空闲内存块，以最大程度地减少内存碎片。算法的核心就在这个函数里。
 
-```
+```c
 /*LAB2 EXERCISE 2: YOUR CODE*/ 
     // 下面的代码是first-fit的部分代码，请修改下面的代码改为best-fit
     // 遍历空闲链表，查找满足需求的空闲页框
@@ -325,7 +325,7 @@ Best-Fit算法的核心思想是找到最佳匹配的空闲内存块，以最大
 
 函数best_fit_free_pages释放内存空间。
 
-```
+```c
 /*LAB2 EXERCISE 2: YOUR CODE*/ 
     // 编写代码
     // 具体来说就是设置当前页块的属性为释放的页块数、并将当前页块标记为已分配状态、最后增加nr_free的值
@@ -334,7 +334,7 @@ Best-Fit算法的核心思想是找到最佳匹配的空闲内存块，以最大
     nr_free += n;
 ```
 
-```
+```c
  if (le != &free_list) {
         p = le2page(le, page_link);
         /*LAB2 EXERCISE 2: YOUR CODE*/ 
@@ -368,6 +368,281 @@ Best-Fit算法的核心思想是找到最佳匹配的空闲内存块，以最大
 - 在 best_fit_free_pages 函数中，可以在合并前后检查合并的结果，确保合并后的空闲块不超过一定大小，避免形成过大的空闲块导致内存碎片化。
 - 在添加和删除链表节点时，可以使用更高效的方法来维护链表，减少链表遍历的复杂度，比如使用指针直接指向链表的头部和尾部，避免每次都从头遍历。
 - 可以考虑实现更复杂的内存分配策略，比如使用组合最佳适应和首次适应的方法，在内存不足时优先使用最佳适应，确保分配效率和内存使用率。
+
+## Challenge1：buddy system（伙伴系统）分配算法
+
+#### Buddy System算法把系统中的可用存储空间划分为存储块(Block)来进行管理, 每个存储块的大小必须是2的n次幂(Pow(2, n)), 即1, 2, 4, 8, 16, 32, 64, 128...参考伙伴分配器的一个极简实现，在ucore中实现buddy system分配算法，要求有比较充分的测试用例说明实现的正确性，需要有设计文档。  
+  
+设计文档：  
+
+#### 数据结构
+
+free_area2_t：该结构体管理不同阶次的空闲块。free_list是一个链表数组，每个阶次对应一个链表，用于存储相应阶次的空闲内存块。nr_free则记录了每个阶次的空闲块数量。
+
+```c
+typedef struct {
+    list_entry_t free_list[MAX_ORDER + 1];  // 每个阶次的空闲链表
+    size_t nr_free[MAX_ORDER + 1];  // 当前空闲页面的数量
+} free_area2_t;
+```
+
+#### 核心功能
+
+1、buddy_init()：初始化伙伴系统，清空所有阶次的空闲块链表，并将每个阶次的空闲块数量设为0。
+
+```c
+static void
+buddy_init(void) {
+    for (int order = 0; order <= MAX_ORDER; order++) {
+        list_init(&free_list[order]);  // 初始化每个链表
+        nr_free[order] = 0;            // 设置空闲块数量为 0
+    }
+}
+```
+
+2、buddy_init_memmap()：初始化指定范围的内存页面为可用状态，找到合适的阶次，将内存块插入对应的链表，并更新空闲块数量。  
+
+逻辑：
+- 先将所有页面标记为保留（未使用）状态。
+- 计算块的大小，并将其标记为对应阶次的块。
+- 将该块插入相应阶次的空闲链表。
+
+```c
+static void
+buddy_init_memmap(struct Page *base, size_t n) {
+    assert(n > 0);
+    // 遍历从base开始的n个页面，每次遍历确保页面被标记为已保留（未使用），并将页面的标志和属性设置为0，同时设置页面的引用计数为0
+    struct Page *p = base;
+    for (; p != base + n; p++) {
+        assert(PageReserved(p));
+        p->flags = p->property = 0;
+        set_page_ref(p, 0);
+    }
+
+    size_t order = 0; // 初始化块的大小
+    while ((1 << order) < n) order++; // 找到适当的块大小
+
+    base->property = 1 << order; // 将块大小记录在第一个页面中
+    SetPageProperty(base); // 将此页标记为已分配
+    min_addr = page2pa(base);  // 记录最低地址
+
+    // 初始化自由列表和数量
+    for (size_t j = 0; j <= MAX_ORDER; j++) {
+        list_init(&free_list[j]);
+        nr_free[j] = 0;
+    }
+
+    // 将第一个块加入适当的自由列表
+    list_add(&free_list[order], &(base->page_link));
+    nr_free[order]++; // 记录这个块的数量
+}
+```
+
+3、buddy_alloc_pages()：分配满足请求大小的内存块。如果找到的块比需求大，会进行分裂，将多余的部分重新插入相应的空闲链表。
+
+```c
+static struct Page *
+buddy_alloc_pages(size_t n) {
+    assert(n > 0);  // 确保请求的页数大于0
+    int order = 0;
+    
+    // 计算满足请求n页的最小阶次（order），2^order >= n
+    while ((1 << order) < n) order++;  // 每增加一阶，块大小翻倍
+
+    // 从请求的阶次开始，遍历所有可能的阶次，直到最大阶次
+    for (int current_order = order; current_order <= MAX_ORDER; current_order++) {
+        // 如果当前阶次有空闲块，进入处理逻辑
+        if (!list_empty(&free_list[current_order])) {
+            list_entry_t *le = list_next(&free_list[current_order]);  // 获取空闲块的第一个元素
+            struct Page *page = le2page(le, page_link);  // 获取该链表项对应的Page结构
+            list_del(le);  // 从空闲链表中删除该块
+            nr_free[current_order]--;  // 更新该阶次的空闲块计数
+
+            // 如果找到的块大于请求大小，进行块的分裂
+            while (current_order > order) {
+                current_order--;  // 逐步降低阶次，分裂成更小的块
+                struct Page *buddy_page = page + (1 << current_order);  // 找到分裂后的伙伴块
+                buddy_page->property = 1 << current_order;  // 设置分裂后的块大小
+                SetPageProperty(buddy_page);  // 将分裂出的伙伴块标记为有property的空闲块
+                list_add(&free_list[current_order], &(buddy_page->page_link));  // 将伙伴块加入空闲链表
+                nr_free[current_order]++;  // 更新该阶次的空闲块计数
+            }
+
+            ClearPageProperty(page);  // 清除原始块的property标志，表示它不再是空闲块
+
+            return page;  // 返回满足请求的块
+        }
+    }
+    return NULL;  // 如果没有足够大的块可用，返回NULL
+}
+```
+
+4、buddy_free_pages()：释放指定的内存块并尝试与相邻的块合并。若相邻块也为空闲，合并成一个更大的块，并插入相应的阶次链表。
+
+```c
+static void
+buddy_free_pages(struct Page *base, size_t n) {
+    assert(n > 0);
+
+    struct Page *p = base;
+    for (; p != base + n; p++) {
+        assert(!PageReserved(p) && !PageProperty(p));
+        p->flags = 0;
+        set_page_ref(p, 0);
+    }
+
+    int order = 0;
+    while ((1 << order) < n) order++;  // 找到块的大小
+
+    struct Page *buddy_page;
+    uintptr_t buddy_addr;
+    uintptr_t base_addr;
+
+    while (order < MAX_ORDER) {
+        //计算伙伴块的地址以找到伙伴块
+        base_addr = page2pa(base);
+        if (((base_addr - min_addr) / (1 << (order + 12))) % 2 == 0) {
+            buddy_addr = base_addr + (1 << (order + 12));
+        } else {
+            buddy_addr = base_addr - (1 << (order + 12));
+        }
+        buddy_page = pa2page(buddy_addr);
+        if (!PageProperty(buddy_page)) {
+            // 伙伴块不空闲，不能合并
+            break;
+        }
+
+        // 从链表中删除伙伴块，合并两个块
+        list_del(&(buddy_page->page_link));
+        nr_free[order]--;  // 减少空闲块计数
+
+        if (buddy_page < base) {
+            base = buddy_page;  // 使 page 指向合并后的块
+        }
+
+        ClearPageProperty(buddy_page);
+        order++;  // 增加块大小
+    }
+
+    base->property = 1 << order;
+    SetPageProperty(base);
+
+    // 将合并后的块插入适当大小的链表
+    list_add(&free_list[order], &(base->page_link));
+    nr_free[order]++;  // 增加空闲块计数
+}
+```
+
+5、buddy_nr_free_pages()：返回所有阶次的空闲页面总数。
+
+```c
+static size_t
+buddy_nr_free_pages(void) {
+    size_t total_free = 0;
+    for (size_t order = 0; order <= MAX_ORDER; order++) {
+        total_free += nr_free[order] * (1 << order); // 计算每种块的总数
+    }
+    return total_free; // 返回总空闲页面数量
+}
+```
+
+6、buddy_check()：通过一系列分配和释放操作，验证伙伴系统的正确性，包括内存块的合并和分裂。
+
+```c
+static void
+buddy_check(void) {
+    int order = 0;
+    struct Page *p0, *p1, *p2, *p3, *p4;
+
+    // 记录初始的空闲页总数
+    unsigned int nr_free_store = nr_free_pages();
+    cprintf("Initial nr_free_pages: %u\n", nr_free_store);
+
+    // Step 1: 分配多个不同大小的内存块
+    cprintf("Step 1: Allocating pages...\n");
+    p0 = alloc_pages(1); // 分配 1 页
+    p1 = alloc_pages(2); // 分配 2 页
+    p2 = alloc_pages(4); // 分配 4 页
+    p4 = alloc_pages(129);
+
+    assert(p0 != p1 && p0 != p2 && p1 != p2);
+    cprintf("p0: %p (1 page), p1: %p (2 pages), p2: %p (4 pages)\n", p0, p1, p2);
+    cprintf("p4: %p (129 page)\n", p4);
+
+    assert(page2pa(p0) < npage * PGSIZE);
+    assert(page2pa(p1) < npage * PGSIZE);
+    assert(page2pa(p2) < npage * PGSIZE);
+    assert(page2pa(p4) < npage * PGSIZE);
+    //检测分配的块的位置关系是否符合伙伴系统特性
+    assert(p0 + 2 == p1 && p0 + 4 == p2);
+    assert(p0 + 256 == p4);
+
+    // 检查是否分配了正确大小的页
+    assert(!PageProperty(p0) && !PageProperty(p1) && !PageProperty(p2));
+    assert(!PageProperty(p4));
+    cprintf("Pages allocated successfully, all pages are valid.\n");
+
+    // Step 2: 释放并检测是否合并空闲块
+    cprintf("Step 2: Freeing pages and checking merge...\n");
+    free_pages(p0, 1);  // 释放 1 页
+    free_pages(p1, 2);  // 释放 2 页
+    free_pages(p2, 4);  // 释放 4 页
+    free_pages(p4, 129);
+
+    // 检查释放后总的空闲页数是否恢复
+    unsigned int nr_free_after_free = nr_free_pages();
+    cprintf("nr_free_pages after free: %u\n", nr_free_after_free);
+    assert(nr_free_after_free == nr_free_store);
+    cprintf("Freeing and merging successful, free pages restored.\n");
+
+    // Step 3: 再次分配，确保可以正确分配出已经释放的块
+    cprintf("Step 3: Re-allocating pages...\n");
+    p3 = alloc_pages(4);  // 再次分配 4 页
+    assert(p3 != NULL);
+    cprintf("p3: %p (re-allocated 4 pages)\n", p3);
+
+    // 检查是否分配了正确大小的页
+    assert(!PageProperty(p3));
+    cprintf("Re-allocation successful, pages are valid.\n");
+
+    // Step 4: 释放并检测空闲页的更新情况
+    cprintf("Step 4: Freeing re-allocated pages...\n");
+    free_pages(p3, 4);  // 释放 4 页
+    unsigned int nr_free_after_realloc = nr_free_pages();
+    cprintf("nr_free_pages after re-allocation free: %u\n", nr_free_after_realloc);
+    assert(nr_free_after_realloc == nr_free_store);
+    cprintf("Freeing re-allocated pages successful, free pages restored.\n");
+
+    // Step 5: 检查伙伴合并情况 (e.g., 释放相邻的块时进行合并)
+    cprintf("Step 5: Allocating adjacent pages and checking merge...\n");
+    p0 = alloc_pages(2);  // 分配 2 页
+    p1 = alloc_pages(2);  // 再次分配 2 页
+    assert(p0 != NULL && p1 != NULL);
+    cprintf("p0: %p (2 pages), p1: %p (2 pages)\n", p0, p1);
+
+    free_pages(p0, 2);  // 释放 2 页
+    free_pages(p1, 2);  // 释放相邻的 2 页
+
+    // 检查释放后是否合并为更大的块
+    unsigned int nr_free_after_merge = nr_free_pages();
+    cprintf("nr_free_pages after merging adjacent blocks: %u\n", nr_free_after_merge);
+    assert(nr_free_after_merge == nr_free_store);
+    cprintf("Merging adjacent blocks successful.\n");
+
+    cprintf("All steps in basic_check completed successfully!\n");
+}
+```
+
+#### 流程描述
+- 初始化：调用buddy_init()初始化伙伴系统。
+- 内存初始化：使用buddy_init_memmap()将内存页块初始化为可分配状态，并插入相应的空闲链表。
+- 内存分配：使用buddy_alloc_pages()从空闲链表中分配适当大小的内存块。若没有正好匹配的块，分裂较大的块以满足需求。
+- 内存释放：使用buddy_free_pages()释放内存块并尝试与相邻的空闲块合并。
+- 检测：通过buddy_check()验证内存块的合并、释放操作是否正确。
+
+#### 运行结果
+如下图所示，可以看到，伙伴系统可以正常运行并通过了check函数的测试。
+![buddy result](https://github.com/zoygk/myimage/blob/main/NKUOS/Lab2/3.png)
 
 ## Challenge3：硬件的可用物理内存的获取方法
 
