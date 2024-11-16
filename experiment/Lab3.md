@@ -208,9 +208,61 @@ PDE指向页表，而PTE指向具体的物理页面，映射到 Page 数组中�
 **设计思路**：clock算法需要在页面链表中循环查找满足可以被换出的页面，所以有一个list指针curr_ptr用来遍历链表，每当curr_ptr指向的页面的访问标志是1，那么就换出这个页；访问标志是Page结构体中的visited变量=0/1，遍历链表时，如果visited标志是1，则置为0，并继续访问下一个节点，直到出现标志=0的页面。所以这里向链表插入新页面 （ 函数swap_map_swappable）时，节点顺序会对之后的内存访问换出的页面造成影响：如果是list_add_after,那么节点顺序是head→4→3→2→1，如果是liat-add_before,那么节点顺序是1→2→3→4→head。
 
 **比较Clock页替换算法和FIFO算法**:Clock算法在FIFO基础上进行改进，FIFO算法没有考虑到页面的使用情况，完全按照页面分配的先后顺序进行替换，CLOCK算法中，如果页面被使用了，会在访问标志位设为1，那么下一个循环这个页就不会被换出，因为按照局部性原理，被使用的内存地址周围可能在不久后被再次使用，所以CLOCK减少了可能的页面交换。
-
+1. 初始化
 ```c
-while (1) {
+static int
+_clock_init_mm(struct mm_struct *mm)
+{     
+     /*LAB3 EXERCISE 4: YOUR CODE*/ 
+     // 初始化pra_list_head为空链表
+    list_init(&pra_list_head);
+     // 初始化当前指针curr_ptr指向pra_list_head，表示当前页面替换位置为链表头
+     curr_ptr=&pra_list_head;
+     // 将mm的私有成员指针指向pra_list_head，用于后续的页面替换算法操作
+     mm->sm_priv = &pra_list_head;
+     //cprintf(" mm->sm_priv %x in fifo_init_mm\n",mm->sm_priv);
+     return 0;
+}
+```
+2. 设置页面可访问
+```c
+static int
+_clock_map_swappable(struct mm_struct *mm, uintptr_t addr, struct Page *page, int swap_in)
+{
+    list_entry_t *entry=&(page->pra_page_link);
+    list_entry_t *head=(list_entry_t*) mm->sm_priv;
+    assert(entry != NULL && curr_ptr != NULL);
+    //record the page access situlation
+    /*LAB3 EXERCISE 4: YOUR CODE*/ 
+    // link the most recent arrival page at the back of the pra_list_head qeueue.
+    // 将页面page插入到页面链表pra_list_head的末尾
+    list_add_before(head, entry);
+    //list_add(head,entry);
+    //record the page access situlation
+    //(1)link the most recent arrival page at the back of the pra_list_head qeueue.
+    // 将页面的visited标志置为1，表示该页面已被访问
+    
+    uintptr_t pageptr=page->pra_vaddr;
+    pte_t *ptep = get_pte(mm->pgdir, pageptr, 0);//获得page对应的页表项
+    if((*ptep & PTE_A)==0){
+        *ptep=*ptep | PTE_A;
+    }
+   page->visited=1;
+    return 0;
+}
+```
+3. 页面替换算法
+```c
+static int
+_clock_swap_out_victim(struct mm_struct *mm, struct Page ** ptr_page, int in_tick)
+{
+     list_entry_t *head=(list_entry_t*) mm->sm_priv;
+         assert(head != NULL);
+     assert(in_tick==0);
+     /* Select the victim */
+     //(1)  unlink the  earliest arrival page in front of pra_list_head qeueue
+     //(2)  set the addr of addr of this page to ptr_page
+    while (1) {
         /*LAB3 EXERCISE 4: YOUR CODE*/ 
         // 编写代码
         // 遍历页面链表pra_list_head，查找最早未被访问的页面
@@ -238,8 +290,12 @@ while (1) {
             //更新curr_ptr
             curr_ptr=list_next(curr_ptr);
         }
- }
+            
+    }
+    return 0;
+}
 ```
+**注释**:在判断页面是否被访问时有两种方式，一个是根据Page结构体的visited成员，另一个是通过Page的pra_vaddr（虚拟地址）找到对应的页表项，根据页表项里的Access位判断
 
 
 
