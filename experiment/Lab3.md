@@ -190,3 +190,103 @@ PDE指向页表，而PTE指向具体的物理页面，映射到 Page 数组中�
 ## 练习5：阅读代码和实现手册，理解页表映射方式相关知识（思考题）
 
 >如果我们采用”一个大页“ 的页表映射方式，相比分级页表，有什么好处、优势，有什么坏处、风险？
+
+
+
+## 扩展练习 Challenge：实现不考虑实现开销和效率的LRU页替换算法  
+
+#### 分析
+
+最久未使用(least recently used, LRU)算法：利用局部性，通过过去的访问情况预测未来的访问情况，我们可以认为最近还被访问过的页面将来被访问的可能性大，而很久没访问过的页面将来不太可能被访问。于是我们比较当前内存里的页面最近一次被访问的时间，把上一次访问时间离现在最久的页面置换出去。  
+
+为了实现LRU算法，容易想到的一种做法是，每当硬件访问一个页面时，将该页面在LRU队列中的位置移至队列头，这样，队列尾部即为最久未访问的页面。但是，现有的硬件并不支持这种做法，因为硬件只有在访问一个会触发PageFault的页面时，swap_manager才会收到信息进而修改LRU队列，而硬件在访问一个不会触发PageFault的页面时，swap_manager不会收到任何信息，也就不会执行任何操作。我们能得到的唯一的硬件支持是在硬件访问一个页时，该页的PTE_A位会被置位，而且这个置位也是没有任何通知的，只有当操作系统主动去读取该位时，才会知道这个页曾经被访问过。  
+
+在只有这一硬件支持的情况下，为了尽可能地贴合LRU算法的思想，考虑让swap_manager周期性（如时钟中断）的去读取LRU链表中每个页的PTE_A位，将被置位的页移至队列头，并将它们的PTE_A位复位。读取的周期越短，这一实现就越接近LRU算法。
+
+#### 设计
+
+由于只有在周期性的中断时才会根据访问时间去更新LRU链表，只需要在_lru_tick_event（）函数中设计一个简单的更新算法即可，而_lru_init_mm（）、_lru_map_swappable（）、_lru_swap_out_victim（）这几个函数与FIFO算法没有区别。
+```c
+static int
+_lru_tick_event(struct mm_struct *mm) //时钟中断时更新LRU队列
+{ 
+    list_entry_t *head=(list_entry_t*) mm->sm_priv;
+
+    list_entry_t *le = head;
+    //遍历LRU队列查找PTE_A 位被置位的页
+    while ((le = list_next(le)) != head) {
+        struct Page* page = le2page(le, pra_page_link);
+        pte_t *ptep = get_pte(mm->pgdir, page->pra_vaddr, 0);
+
+        // 如果页面被访问（PTE_A 位被置位），将该结点移至队列头
+        if ((*ptep & PTE_A) != 0) {
+            list_entry_t *entry=le;
+            le = list_prev(entry);
+            list_del(entry);
+            list_add(head,entry);
+
+            // 清除 PTE_A 位，表示该页面的访问状态被重置
+            *ptep &= ~PTE_A;
+        }
+    }
+
+    return 0; 
+}
+```
+
+设计一个_lru_check_swap（）函数以检验算法的正确性，由于实际上并未实现时钟中断操作，在_lru_check_swap（）函数中主动调用swap_tick_event（）函数模拟时钟中断。
+```c
+static int
+_lru_check_swap(void) {
+    extern struct mm_struct *check_mm_struct;
+    //队列（头->尾）：dcba
+    swap_tick_event(check_mm_struct);
+    //队列（头->尾）：abcd
+    cprintf("write Virt Page e in lru_check_swap\n");
+    *(unsigned char *)0x5000 = 0x0e;
+    assert(pgfault_num==5);
+    swap_tick_event(check_mm_struct);
+    //队列（头->尾）：eabc
+    cprintf("write Virt Page a in lru_check_swap\n");
+    *(unsigned char *)0x1000 = 0x0a;
+    assert(pgfault_num==5);
+    swap_tick_event(check_mm_struct);
+    //队列（头->尾）：aebc
+    cprintf("write Virt Page d in lru_check_swap\n");
+    *(unsigned char *)0x4000 = 0x0d;
+    assert(pgfault_num==6);
+    swap_tick_event(check_mm_struct);
+    //队列（头->尾）：daeb
+    cprintf("write Virt Page b in lru_check_swap\n");
+    *(unsigned char *)0x2000 = 0x0b;
+    assert(pgfault_num==6);
+    swap_tick_event(check_mm_struct);
+    //队列（头->尾）：bdae
+    cprintf("write Virt Page c in lru_check_swap\n");
+    *(unsigned char *)0x3000 = 0x0c;
+    assert(pgfault_num==7); 
+    swap_tick_event(check_mm_struct);
+    //队列（头->尾）：cbda
+    cprintf("write Virt Page a in lru_check_swap\n");
+    *(unsigned char *)0x1000 = 0x0a;
+    assert(pgfault_num==7);
+    swap_tick_event(check_mm_struct);
+    //队列（头->尾）：acbd
+    cprintf("write Virt Page e in lru_check_swap\n");
+    *(unsigned char *)0x5000 = 0x0e;
+    assert(pgfault_num==8);
+    swap_tick_event(check_mm_struct);
+    //队列（头->尾）：eacb
+    cprintf("write Virt Page d in lru_check_swap\n");
+    *(unsigned char *)0x4000 = 0x0d;
+    assert(pgfault_num==9);
+    swap_tick_event(check_mm_struct);
+    //队列（头->尾）：deac
+    return 0;
+}
+```
+
+#### 测试
+
+运行make qemu，可以发现该算法正确执行了check_swap（）函数。
+![LRU测试](https://github.com/zoygk/myimage/blob/main/NKUOS/Lab3/LRU%E6%B5%8B%E8%AF%95.png)
