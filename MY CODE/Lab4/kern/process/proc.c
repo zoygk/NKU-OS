@@ -183,7 +183,17 @@ proc_run(struct proc_struct *proc) {
         *   lcr3():                   Modify the value of CR3 register
         *   switch_to():              Context switching between two processes
         */
-
+        bool intr_flag;
+        struct proc_struct *prev = current;
+        local_intr_save(intr_flag);
+        {
+            current=proc;
+            lcr3(proc->cr3);
+            //switch_to(current,proc);
+            switch_to(&(prev->context),&(proc->context));
+            // current=proc;
+        }
+        local_intr_restore(intr_flag);
     }
 }
 
