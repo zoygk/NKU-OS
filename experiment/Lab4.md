@@ -287,7 +287,32 @@ get_pid(void) {
 >请回答如下问题：
 >
 > - 在本实验的执行过程中，创建且运行了几个内核线程？
+### 函数的实现过程
+``` c
+if (proc != current) {//判断要切换的进程与当前正在运行进程是否相同
+        // LAB4:EXERCISE3 YOUR CODE
+        /*
+        * Some Useful MACROs, Functions and DEFINEs, you can use them in below implementation.
+        * MACROs or Functions:
+        *   local_intr_save():        Disable interrupts
+        *   local_intr_restore():     Enable Interrupts
+        *   lcr3():                   Modify the value of CR3 register
+        *   switch_to():              Context switching between two processes
+        */
+        bool intr_flag;
+        struct proc_struct *prev = current;
+        local_intr_save(intr_flag);//禁用时钟中断
+        {
+            current=proc;//切换当前进程为要运行的进程
+            lcr3(proc->cr3);//切换页表
+            switch_to(&(prev->context),&(proc->context));//此处的参数是新旧进程上下文
+        }
+        local_intr_restore(intr_flag);//重新开启中断
+    }
+```
+### 本实验在执行过程中分别创建了两个内核线程
 
+分别是idleproc和initproc，这两个内核线程共用一个页表
 ## 扩展练习 Challenge
 
 > 说明语句local_intr_save(intr_flag);....local_intr_restore(intr_flag);是如何实现开关中断的？
