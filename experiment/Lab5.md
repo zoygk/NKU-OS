@@ -246,7 +246,7 @@ exec/wait/exit函数的执行流程与fork函数基本相同，区别只有传�
 
 ### 实验结果
 
-![alt text](1.png)
+![alt text](https://github.com/zoygk/myimage/blob/main/NKUOS/Lab5/1.png)
 
 ## 扩展练习 Challenge2
 
